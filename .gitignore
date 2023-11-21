@@ -6,3 +6,5 @@
 *.synctex.gz
 *.toc
 /report/*.pdf
+*.dvi
+*.ps
