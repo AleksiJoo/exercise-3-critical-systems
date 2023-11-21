@@ -48,7 +48,7 @@ use esp_println::println;
 const SSID: &str = env!("SSID");
 const PASSWORD: &str = env!("PASSWORD");
 /// Get this from the host-client application
-const UUID: &str = "16e337a0-935d-4f32-bf3c-6ded006cbca3";
+const UUID: &str = "55af4250-1e44-475d-acbc-108d3ea7c3e6";
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
 macro_rules! singleton {

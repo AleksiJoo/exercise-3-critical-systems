@@ -1,2 +1,8 @@
 **/target/
-
+*.aux
+*.log
+*.out
+*.idx
+*.synctex.gz
+*.toc
+/report/*.pdf
