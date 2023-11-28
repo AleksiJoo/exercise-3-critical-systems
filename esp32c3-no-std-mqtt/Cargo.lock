@@ -1234,6 +1234,7 @@ dependencies = [
  "mqtt-topics",
  "nb 1.1.0",
  "rust-mqtt",
+ "shtcx",
  "static_cell",
 ]
 
@@ -1293,6 +1294,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.39",
+]
+
+[[package]]
+name = "shtcx"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5bd1204f09b6ac592e246244e611a42a7d8f373b52dd8af27435305469e9a4d"
+dependencies = [
+ "embedded-hal 0.2.7",
 ]
 
 [[package]]
