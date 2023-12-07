@@ -12,11 +12,12 @@
 use hal::{
     clock::{ClockControl, CpuClock},
     embassy,
-    peripherals::Peripherals,
+    i2c::I2C,
+    peripherals::{Peripherals, I2C0},
     prelude::*,
     systimer::SystemTimer,
     timer::TimerGroup,
-    Rng,
+    Delay, Rng, IO,
 };
 
 // Wifi-related imports
@@ -44,6 +45,7 @@ use rust_mqtt::{
 
 use esp_backtrace as _;
 use esp_println::println;
+use shtcx::{sensor_class::Sht2Gen, PowerMode, ShtCx};
 
 const SSID: &str = env!("SSID");
 const PASSWORD: &str = env!("PASSWORD");
@@ -118,7 +120,11 @@ async fn net_task(stack: &'static Stack<WifiDevice<'static>>) {
 
 // our "main" task
 #[embassy_executor::task]
-async fn task(stack: &'static Stack<WifiDevice<'static>>) {
+async fn task(
+    stack: &'static Stack<WifiDevice<'static>>,
+    mut sht: ShtCx<Sht2Gen, I2C<'static, I2C0>>,
+    mut delay: Delay,
+) {
     let mut rx_buffer = [0; 4096];
     let mut tx_buffer = [0; 4096];
 
@@ -159,7 +165,7 @@ async fn task(stack: &'static Stack<WifiDevice<'static>>) {
         };
 
         let remote_endpoint = (address, 1883);
-        println!("connecting...");
+        println!("Connecting...");
         let connection = socket.connect(remote_endpoint).await;
         if let Err(e) = connection {
             println!("connect error: {:?}", e);
@@ -194,32 +200,64 @@ async fn task(stack: &'static Stack<WifiDevice<'static>>) {
         }
 
         loop {
-            match client
-                .send_message(
-                    temperature_data_topic(UUID, Esp::EspTarget1).as_str(),
-                    b"Hello",
-                    rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS0,
-                    true,
-                )
-                .await
-            {
-                Ok(()) => {
-                    println!("se on OK")
-                }
-                Err(mqtt_error) => match mqtt_error {
-                    ReasonCode::NetworkError => {
-                        println!("MQTT Network Error");
-                        continue;
-                    }
-                    _ => {
-                        println!("Other MQTT Error: {:?}", mqtt_error);
-                        continue;
-                    }
-                },
-            }
+            let measurement = sht.measure(PowerMode::NormalMode, &mut delay).unwrap();
+            let temperature = measurement.temperature.as_degrees_celsius();
+            println!("{temperature} C");
+            let temp_msg: [u8; 40] = construct_message(temperature);
+            write_message(&mut client, "sensor_data/temperature", temp_msg).await;
+
+            let humidity = measurement.humidity.as_percent();
+            println!("{humidity} %");
+            let hum_msg = construct_message(humidity);
+            write_message(&mut client, "sensor_data/humidity", hum_msg).await;
+
             Timer::after(Duration::from_millis(3000)).await;
         }
     }
+}
+
+async fn write_message(
+    client: &mut MqttClient<'_, TcpSocket<'_>, 5, CountingRng>,
+    topic: &str,
+    msg: [u8; 40],
+) {
+    let send_status = client
+        .send_message(
+            topic,
+            &msg,
+            rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS0,
+            true,
+        )
+        .await;
+
+    match send_status {
+        Ok(()) => {
+            // println!("Message sent to {}", topic)
+        }
+        Err(mqtt_error) => match mqtt_error {
+            ReasonCode::NetworkError => {
+                println!("MQTT Network Error");
+                return;
+            }
+            _ => {
+                println!("Other MQTT Error: {:?}", mqtt_error);
+                return;
+            }
+        },
+    }
+}
+
+fn construct_message(measurement: f32) -> [u8; 40] {
+    let mut msg: [u8; 40] = [0; 40];
+    let id = UUID.as_bytes();
+
+    for (i, b) in id.iter().enumerate() {
+        msg[i] = *b;
+    }
+    for (b, i) in measurement.to_le_bytes().iter().zip(36..40) {
+        msg[i] = *b;
+    }
+    msg
 }
 
 #[entry]
@@ -262,11 +300,24 @@ fn main() -> ! {
         seed
     ));
 
+    let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
+
+    let i2c0 = I2C::new(
+        peripherals.I2C0,
+        io.pins.gpio10,
+        io.pins.gpio8,
+        400u32.kHz(),
+        &clocks,
+    );
+
+    let sht = shtcx::shtc3(i2c0);
+    let delay = Delay::new(&clocks);
+
     let executor = EXECUTOR.init(Executor::new());
     executor.run(|spawner| {
         spawner.spawn(connection(controller)).unwrap();
         spawner.spawn(net_task(&stack)).unwrap();
-        spawner.spawn(task(&stack)).unwrap();
+        spawner.spawn(task(&stack, sht, delay)).unwrap();
     });
 }
 

@@ -32,13 +32,13 @@ fn main() -> ! {
 
     let i2c0 = I2C::new(
         peripherals.I2C0,
-        io.pins.gpio8,
         io.pins.gpio10,
+        io.pins.gpio8,
         400u32.kHz(),
         &clocks,
     );
 
-    let mut sht = shtcx::shtc3(i2c0);
+    let mut sht: shtcx::ShtCx<shtcx::sensor_class::Sht2Gen, _> = shtcx::shtc3(i2c0);
     let mut delay = Delay::new(&clocks);
 
     sht.wakeup(&mut delay).unwrap();

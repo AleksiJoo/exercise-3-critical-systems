@@ -12,23 +12,46 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mqttoptions = MqttOptions::new(client_id, mqtt_host, 1883);
 
     let (mut client, mut connection) = Client::new(mqttoptions, 100);
-    client.subscribe(
-        temperature_data_topic(UUID, Esp::EspTarget1).as_str(),
-        QoS::AtMostOnce,
-    )?;
+    client.subscribe("sensor_data/temperature", QoS::AtMostOnce)?;
+    client.subscribe("sensor_data/humidity", QoS::AtMostOnce)?;
 
     // Iterate to poll the eventloop for connection progress
     for (_, notification) in connection.iter().enumerate() {
         // if you want to see *everything*, uncomment:
         // println!("Notification = {:#?}", notification);
         if let Ok(rumqttc::Event::Incoming(Packet::Publish(publish_data))) = notification {
-            if publish_data.topic == temperature_data_topic(UUID, Esp::EspTarget1).as_str() {
-                let data: &[u8] = &publish_data.payload;
-                println!("{:?}", data);
-                let data: Result<[u8; 4], _> = data.try_into();
+            if publish_data.topic == "sensor_data/temperature" {
+                let id: &Result<[u8; 36], std::array::TryFromSliceError> =
+                    &publish_data.payload[0..36].try_into();
 
-                if let Ok(data) = data {
-                    println!("{:?}", data)
+                let data: &Result<[u8; 4], std::array::TryFromSliceError> =
+                    &publish_data.payload[36..40].try_into();
+
+                // println!("{:?}", data);
+
+                // println!("{} : {:?}", core::str::from_utf8(id).unwrap(), temp_val);
+                if let (Ok(data), Ok(id)) = (data, id) {
+                    let temp_val = f32::from_le_bytes(*data);
+                    if let Ok(id) = core::str::from_utf8(id) {
+                        println!("{} : {:?} C", id, temp_val);
+                    }
+                }
+            }
+            if publish_data.topic == "sensor_data/humidity" {
+                let id: &Result<[u8; 36], std::array::TryFromSliceError> =
+                    &publish_data.payload[0..36].try_into();
+
+                let data: &Result<[u8; 4], std::array::TryFromSliceError> =
+                    &publish_data.payload[36..40].try_into();
+
+                // println!("{:?}", data);
+
+                // println!("{} : {:?}", core::str::from_utf8(id).unwrap(), temp_val);
+                if let (Ok(data), Ok(id)) = (data, id) {
+                    let hum_value = f32::from_le_bytes(*data);
+                    if let Ok(id) = core::str::from_utf8(id) {
+                        println!("{} : {:?} %", id, hum_value);
+                    }
                 }
             }
         }
