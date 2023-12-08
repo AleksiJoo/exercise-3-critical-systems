@@ -5,7 +5,7 @@
 *.idx
 *.synctex.gz
 *.toc
-/report/*.pdf
+
 *.dvi
 *.ps
 /report/build*
